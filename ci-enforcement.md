@@ -15,8 +15,12 @@ jobs:
       - run: npx ts-node tools/validate-contracts.ts contracts/
 ```
 
-## Gateway enforcement
-- Apply middleware at your API gateway  
-- Reject non-conforming calls (403/412)  
-- Redact fields before logging  
-- Emit metrics (call_count, error_rate, forbidden_attempts)
+## Gateway enforcement (Node/Express)
+```ts
+import express from "express";
+import { stardotMiddleware } from "./src/middleware";
+const app = express();
+app.use(express.json());
+app.post("/v1/instruments/import", stardotMiddleware("./contracts/instrument_import.json"), (req,res)=>res.json({ok:true}));
+app.listen(3000);
+```

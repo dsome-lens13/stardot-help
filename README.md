@@ -1,38 +1,51 @@
 # Getting Started
 
-StarDot is a **JSON contract layer** that governs how LLMs/agents call your APIs.
+**StarDot** is a **JSON contract layer** that governs how LLMs/agents call your APIs:
+- Deterministic inputs/outputs
+- Guardrails for auth, privacy, rate limits
+- Redaction by default
+- Traceable, observable calls
 
-## Why it matters
-- **Rules** → endpoint allow/deny, required fields, retries, time windows  
-- **Compliance** → PHI/PII redaction, blocked fields, audit trails  
-- **Determinism** → stop on low-confidence, cap steps/tokens  
-- **Observability** → metrics, logs, traces per agent request
+Core principles: **Access, Predictability, Safety, Efficiency, Trust**.
 
-## Quick start (Node/Express)
-```ts
-import express from "express";
-import { stardotMiddleware } from "./src/middleware";
+---
 
-const app = express();
-app.use(express.json());
+## Quick Start (5 minutes)
 
-app.post("/v1/instruments/import",
-  stardotMiddleware("./contracts/instrument_import.json"),
-  (req, res) => res.json({ ok: true })
-);
-
-app.listen(3000, () => console.log("StarDot demo on :3000"));
-```
-
-## Contract (example)
+### 1) Write a contract
 ```json
 {
   "name": "instrument_import",
-  "allowed_endpoints": ["POST /v1/instruments/import"],
-  "allowed_fields": ["instrument_id","type","acquired_at"],
-  "disallowed_fields": ["patient_name","ssn","dob"],
-  "confidence_threshold": 0.9,
-  "redact": ["ssn","dob"],
-  "stop_conditions": ["low_confidence","invalid_field"]
+  "version": "1.0.0",
+  "description": "Safe import for lab instruments",
+  "allowedEndpoints": ["POST /v1/instruments/import"],
+  "allowedFields": ["instrument_id", "type", "acquired_at"],
+  "disallowedFields": ["patient_name", "ssn", "dob"],
+  "redact": [{ "path": "$.ssn" }, { "path": "$.dob" }],
+  "confidenceThreshold": 0.9,
+  "stopConditions": ["low_confidence", "invalid_field"],
+  "observability": { "metrics": ["call_count","error_rate"], "trace": true },
+  "businessRules": {
+    "maxRetries": 2,
+    "businessHours": { "start": "09:00", "end": "17:00", "timezone": "America/New_York" }
+  }
 }
 ```
+
+### 2) Validate
+```bash
+curl -s https://api.stardot.ai/contracts/validate \
+  -H "content-type: application/json" \
+  -d @contracts/instrument_import.json | jq
+```
+
+### 3) Dry-run enforcement
+```bash
+curl -s https://api.stardot.ai/contracts/enforce \
+  -H "content-type: application/json" \
+  -d '{ "contract": { "..." }, "request": { "method": "POST", "path": "/v1/instruments/import", "confidence": 0.86, "body": { "instrument_id": "X-42", "type": "hematology", "ssn": "123-45-6789" } } }' | jq
+```
+
+### 4) Decide
+- `allowed: true` → proceed
+- `allowed: false, decision: "stopped"` → fix the request or relax rules intentionally
